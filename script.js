@@ -1,0 +1,714 @@
+/* Script will go here */
+
+// --- Configuration ---
+const CONFIG = {
+    updateInterval: 2000, // ms
+    maxHistory: 20, // Keep graph clean
+    storageKey: 'satellite_telemetry_data',
+    thresholds: {
+        temperature: { min: -40, max: 85, warningHigh: 60, criticalHigh: 80, warningLow: -20, criticalLow: -35 },
+        humidity: { min: 0, max: 30, warningHigh: 20, criticalHigh: 28 },
+        voltage: { min: 3.3, max: 12, warningLow: 11.5, criticalLow: 11.0, warningHigh: 12.5, criticalHigh: 13.0 }
+    }
+};
+
+// --- State Management ---
+let state = {
+    isLoggedIn: false,
+    missionStartTime: null,
+    selectedMetric: 'temperature', // temperature, humidity, voltage
+    data: {
+        temperature: 25.0,
+        humidity: 10.0,
+        voltage: 12.0
+    },
+    history: {
+        labels: [],
+        temperature: [],
+        humidity: [],
+        voltage: []
+    },
+    health: 100,
+    faults: [],
+    faultLogHistory: [] // Store full log history
+};
+
+let simulationInterval;
+let metInterval;
+let chartInstance;
+let healthPieChart; // New variable for pie chart
+
+// --- DOM Elements ---
+const els = {
+    loginSection: document.getElementById('login-section'),
+    dashboardSection: document.getElementById('dashboard-section'),
+    loginForm: document.getElementById('login-form'),
+    logoutBtn: document.getElementById('logout-btn'),
+    missionTime: document.getElementById('mission-time'),
+    healthPercentage: document.getElementById('health-percentage'),
+    healthText: document.getElementById('health-text'),
+    healthRing: document.querySelector('.progress-ring__circle'),
+    faultLog: document.getElementById('fault-log'),
+    cards: {
+        temperature: document.getElementById('card-temp'),
+        humidity: document.getElementById('card-humidity'),
+        voltage: document.getElementById('card-voltage')
+    },
+    values: {
+        temperature: document.getElementById('temp-value'),
+        humidity: document.getElementById('humidity-value'),
+        voltage: document.getElementById('voltage-value')
+    },
+    statuses: {
+        temperature: document.getElementById('temp-status'),
+        humidity: document.getElementById('humidity-status'),
+        voltage: document.getElementById('voltage-status')
+    },
+    graphTitle: document.getElementById('graph-title'),
+    simToggleBtn: document.getElementById('sim-toggle-btn'),
+    simResetBtn: document.getElementById('sim-reset-btn')
+};
+
+// --- Initialization ---
+document.addEventListener('DOMContentLoaded', () => {
+    loadState();
+    setupEventListeners();
+    initChart();
+    initHealthPieChart(); // Initialize pie chart
+    
+    // Check if we were already logged in (persisted session)
+    if (state.isLoggedIn) {
+        restoreSession();
+    }
+});
+
+function setupEventListeners() {
+    els.loginForm.addEventListener('submit', (e) => {
+        e.preventDefault();
+        login();
+    });
+
+    els.logoutBtn.addEventListener('click', logout);
+    
+    // Simulation Controls
+    els.simToggleBtn.addEventListener('click', toggleSimulation);
+    els.simResetBtn.addEventListener('click', resetSimulation);
+}
+
+// --- Authentication & Session ---
+function login() {
+    state.isLoggedIn = true;
+    state.missionStartTime = new Date(); // Reset time on new login
+    saveState();
+    
+    transitionToDashboard();
+    startSimulation();
+}
+
+function restoreSession() {
+    // If we have a stored start time, use it, otherwise reset
+    if (typeof state.missionStartTime === 'string') {
+        state.missionStartTime = new Date(state.missionStartTime);
+    } else if (!state.missionStartTime) {
+        state.missionStartTime = new Date();
+    }
+    
+    transitionToDashboard();
+    startSimulation();
+}
+
+function transitionToDashboard() {
+    els.loginSection.classList.add('hidden-section');
+    els.dashboardSection.classList.remove('hidden-section');
+}
+
+function logout() {
+    state.isLoggedIn = false;
+    state.missionStartTime = null;
+    state.history = { labels: [], temperature: [], humidity: [], voltage: [] }; // Clear history on logout
+    saveState();
+    
+    stopSimulation();
+    
+    els.dashboardSection.classList.add('hidden-section');
+    els.loginSection.classList.remove('hidden-section');
+    els.loginForm.reset();
+}
+
+// --- Data Persistence ---
+function saveState() {
+    localStorage.setItem(CONFIG.storageKey, JSON.stringify(state));
+}
+
+function loadState() {
+    const stored = localStorage.getItem(CONFIG.storageKey);
+    if (stored) {
+        try {
+            const parsed = JSON.parse(stored);
+            // Merge stored state with defaults to ensure structure
+            state = { ...state, ...parsed };
+        } catch (e) {
+            console.error("Failed to load state", e);
+        }
+    }
+}
+
+// --- Simulation Logic ---
+let isPaused = false;
+
+function startSimulation() {
+    updateMET();
+    updateUI(); 
+    
+    if (metInterval) clearInterval(metInterval);
+    if (simulationInterval) clearInterval(simulationInterval);
+
+    metInterval = setInterval(() => {
+        if (!isPaused) updateMET();
+    }, 1000);
+    
+    simulationInterval = setInterval(() => {
+        if (!isPaused) {
+            simulateData();
+            saveState(); 
+        }
+    }, CONFIG.updateInterval);
+}
+
+function toggleSimulation() {
+    isPaused = !isPaused;
+    els.simToggleBtn.textContent = isPaused ? '▶' : '⏸';
+    els.simToggleBtn.title = isPaused ? 'Resume Simulation' : 'Pause Simulation';
+}
+
+function resetSimulation() {
+    // Reset data to nominal
+    state.data = {
+        temperature: 25.0,
+        humidity: 10.0,
+        voltage: 12.0
+    };
+    state.history = {
+        labels: [],
+        temperature: [],
+        humidity: [],
+        voltage: []
+    };
+    state.faultLogHistory = []; // Clear log on reset
+    state.missionStartTime = new Date();
+    
+    updateUI();
+    updateFaultLogUI(); // Clear UI log
+    saveState();
+}
+
+// --- MET Update ---
+function updateMET() {
+    if (!state.missionStartTime) return;
+    
+    const now = new Date();
+    const diff = now - state.missionStartTime;
+    
+    const hours = Math.floor(diff / 3600000);
+    const minutes = Math.floor((diff % 3600000) / 60000);
+    const seconds = Math.floor((diff % 60000) / 1000);
+    
+    els.missionTime.textContent = 
+        `${String(hours).padStart(2, '0')}:${String(minutes).padStart(2, '0')}:${String(seconds).padStart(2, '0')}`;
+}
+
+// --- Data Simulation ---
+function simulateData() {
+    // Simulate realistic drift and noise
+    
+    // Temperature: Random walk
+    const tempDrift = (Math.random() - 0.5) * 1.5;
+    state.data.temperature = clamp(state.data.temperature + tempDrift, -40, 90);
+
+    // Humidity: Smoother drift (improved stability)
+    // Previously too erratic. Now drifts slowly like temperature.
+    const humDrift = (Math.random() - 0.5) * 0.5;
+    state.data.humidity += humDrift;
+    state.data.humidity = clamp(state.data.humidity, 0, 40);
+
+    // Voltage: Stable with occasional dips
+    if (Math.random() > 0.98) {
+        state.data.voltage = 11.0 + Math.random(); // Dip
+    } else {
+        // Return to nominal 12V
+        state.data.voltage = state.data.voltage * 0.9 + 12.0 * 0.1;
+    }
+    state.data.voltage = clamp(state.data.voltage, 0, 14);
+
+    // Update History
+    const now = new Date();
+    const timeLabel = `${now.getHours()}:${String(now.getMinutes()).padStart(2, '0')}:${String(now.getSeconds()).padStart(2, '0')}`;
+    
+    state.history.labels.push(timeLabel);
+    state.history.temperature.push(state.data.temperature);
+    state.history.humidity.push(state.data.humidity);
+    state.history.voltage.push(state.data.voltage);
+
+    // Maintain fixed history size
+    if (state.history.labels.length > CONFIG.maxHistory) {
+        state.history.labels.shift();
+        state.history.temperature.shift();
+        state.history.humidity.shift();
+        state.history.voltage.shift();
+    }
+
+    updateUI();
+}
+
+function clamp(val, min, max) {
+    return Math.min(Math.max(val, min), max);
+}
+
+// --- UI Updates ---
+function updateUI() {
+    // Update Numeric Values
+    els.values.temperature.textContent = state.data.temperature.toFixed(1);
+    els.values.humidity.textContent = state.data.humidity.toFixed(1);
+    els.values.voltage.textContent = state.data.voltage.toFixed(2);
+
+    // Analyze Health & Faults
+    analyzeHealth();
+
+    // Update Chart
+    updateChart();
+}
+
+function analyzeHealth() {
+    let healthScore = 100;
+    let faults = [];
+    let statusColors = {
+        temperature: 'var(--success-color)',
+        humidity: 'var(--success-color)',
+        voltage: 'var(--success-color)'
+    };
+
+    // Voltage Rules
+    if (state.data.voltage < CONFIG.thresholds.voltage.criticalLow) {
+        healthScore -= 50;
+        faults.push("CRITICAL: Power Loss");
+        statusColors.voltage = 'critical';
+    } else if (state.data.voltage < CONFIG.thresholds.voltage.warningLow) {
+        healthScore -= 20;
+        faults.push("WARNING: Low Voltage");
+        statusColors.voltage = 'warning';
+    } else {
+        statusColors.voltage = 'normal';
+    }
+
+    // Temperature Rules (Refined)
+    if (state.data.temperature > CONFIG.thresholds.temperature.criticalHigh) {
+        healthScore -= 40;
+        faults.push("CRITICAL: Overheating");
+        statusColors.temperature = 'critical';
+    } else if (state.data.temperature > CONFIG.thresholds.temperature.warningHigh) {
+        healthScore -= 15;
+        faults.push("WARNING: High Temp");
+        statusColors.temperature = 'warning';
+    } else {
+        statusColors.temperature = 'normal';
+    }
+
+    // Humidity Rules (Refined)
+    if (state.data.humidity > CONFIG.thresholds.humidity.criticalHigh) {
+        healthScore -= 20;
+        faults.push("CRITICAL: Moisture Detected");
+        statusColors.humidity = 'critical';
+    } else if (state.data.humidity > CONFIG.thresholds.humidity.warningHigh) {
+        healthScore -= 10;
+        faults.push("WARNING: High Humidity");
+        statusColors.humidity = 'warning';
+    } else {
+        statusColors.humidity = 'normal';
+    }
+
+    state.health = Math.max(0, healthScore);
+    state.faults = faults;
+
+    // Update Status Indicators using Classes
+    updateStatusDot(els.statuses.temperature, statusColors.temperature);
+    updateStatusDot(els.statuses.humidity, statusColors.humidity);
+    updateStatusDot(els.statuses.voltage, statusColors.voltage);
+
+    // Update Health Ring
+    updateHealthRing(state.health);
+    updateFaultLog(faults);
+    updateHealthPieChart(state.health);
+    
+    // Check for fault clearance
+    checkFaultClearance(faults);
+}
+
+let previousFaults = [];
+
+function checkFaultClearance(currentFaults) {
+    // If we had faults before, but now we have fewer or none
+    if (previousFaults.length > 0 && currentFaults.length === 0) {
+        logFault("System Recovered: All faults cleared.", "success");
+    }
+    previousFaults = currentFaults;
+}
+
+function updateStatusDot(element, status) {
+    // Reset classes
+    element.classList.remove('warning', 'critical');
+    
+    // Remove inline styles that might interfere (from previous version)
+    element.style.backgroundColor = '';
+    element.style.boxShadow = '';
+
+    if (status === 'critical') {
+        element.classList.add('critical');
+    } else if (status === 'warning') {
+        element.classList.add('warning');
+    }
+    // 'normal' relies on default CSS
+}
+
+// --- Health Ring & Fault Log ---
+function updateHealthRing(percent) {
+    const radius = 52;
+    const circumference = 2 * Math.PI * radius;
+    const offset = circumference - (percent / 100) * circumference;
+    
+    els.healthRing.style.strokeDashoffset = offset;
+    els.healthPercentage.textContent = Math.round(percent);
+
+    let color = '#00ff88'; // Green
+    let text = 'System Nominal';
+    
+    if (percent < 40) {
+        color = '#ff4d4d'; // Red
+        text = 'CRITICAL FAULT';
+    } else if (percent < 80) {
+        color = '#ffcc00'; // Yellow
+        text = 'System Warning';
+    }
+
+    els.healthRing.style.stroke = color;
+    els.healthText.textContent = text;
+    els.healthText.style.color = color;
+}
+
+function updateFaultLog(faults) {
+    // This function is now just for real-time detection logging
+    // We'll integrate it with the persistent log
+    
+    faults.forEach(fault => {
+        // Avoid duplicate spamming of the same fault in the log
+        const lastLog = state.faultLogHistory[0];
+        if (!lastLog || lastLog.message !== fault) {
+             // Add context data to the log message
+            const context = ` | T:${state.data.temperature.toFixed(1)}°C V:${state.data.voltage.toFixed(2)}V H:${state.data.humidity.toFixed(1)}%`;
+            logFault(fault + context, fault.includes("CRITICAL") ? 'critical' : 'warning');
+        }
+    });
+}
+
+function updateFaultLogUI() {
+    els.faultLog.innerHTML = '';
+    
+    if (state.faultLogHistory.length === 0) {
+        const div = document.createElement('div');
+        div.className = 'log-entry';
+        div.textContent = "System Nominal - No Events";
+        div.style.color = 'var(--text-muted)';
+        els.faultLog.appendChild(div);
+        return;
+    }
+
+    state.faultLogHistory.forEach(entry => {
+        const div = document.createElement('div');
+        div.className = 'log-entry';
+        
+        const timeSpan = document.createElement('span');
+        timeSpan.className = 'log-timestamp';
+        timeSpan.textContent = entry.timestamp;
+        
+        const msgSpan = document.createElement('span');
+        msgSpan.textContent = entry.message;
+        
+        if (entry.type === 'critical') msgSpan.style.color = 'var(--danger-color)';
+        else if (entry.type === 'warning') msgSpan.style.color = 'var(--warning-color)';
+        else if (entry.type === 'success') msgSpan.style.color = 'var(--success-color)';
+        
+        div.appendChild(timeSpan);
+        div.appendChild(msgSpan);
+        els.faultLog.appendChild(div);
+    });
+}
+
+// --- Health Pie Chart ---
+function initHealthPieChart() {
+    const ctx = document.getElementById('healthPieChart').getContext('2d');
+    
+    healthPieChart = new Chart(ctx, {
+        type: 'doughnut',
+        data: {
+            labels: ['Healthy', 'Warning', 'Critical'],
+            datasets: [{
+                data: [100, 0, 0],
+                backgroundColor: [
+                    '#00ff88', // Green
+                    '#ffcc00', // Yellow
+                    '#ff4d4d'  // Red
+                ],
+                borderWidth: 0,
+                hoverOffset: 4
+            }]
+        },
+        options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            cutout: '70%',
+            plugins: {
+                legend: {
+                    position: 'right',
+                    labels: {
+                        color: '#fff',
+                        font: { size: 10 },
+                        boxWidth: 10
+                    }
+                },
+                tooltip: { enabled: false }
+            }
+        }
+    });
+}
+
+function updateHealthPieChart(healthScore) {
+    if (!healthPieChart) return;
+
+    // Calculate distribution based on health score
+    // This is a visual representation logic
+    let healthy = 0;
+    let warning = 0;
+    let critical = 0;
+
+    if (healthScore >= 80) {
+        healthy = healthScore;
+        warning = 100 - healthScore;
+    } else if (healthScore >= 40) {
+        healthy = 40;
+        warning = healthScore - 40;
+        critical = 100 - healthScore;
+    } else {
+        healthy = 0;
+        warning = healthScore;
+        critical = 100 - healthScore;
+    }
+
+    // Update data
+    healthPieChart.data.datasets[0].data = [healthy, warning, critical];
+    healthPieChart.update();
+}
+
+// --- Chart.js Integration ---
+function initChart() {
+    const ctx = document.getElementById('telemetryChart').getContext('2d');
+    
+    chartInstance = new Chart(ctx, {
+        type: 'line',
+        data: {
+            labels: [],
+            datasets: [{
+                label: 'Metric',
+                data: [],
+                borderColor: '#00d4ff',
+                backgroundColor: 'rgba(0, 212, 255, 0.1)',
+                borderWidth: 2,
+                pointRadius: 3,
+                pointHoverRadius: 5,
+                fill: true,
+                tension: 0.4
+            }]
+        },
+        options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            plugins: {
+                legend: { display: false },
+                tooltip: {
+                    mode: 'index',
+                    intersect: false,
+                    backgroundColor: 'rgba(11, 13, 23, 0.9)',
+                    titleColor: '#fff',
+                    bodyColor: '#00d4ff',
+                    borderColor: 'rgba(255,255,255,0.1)',
+                    borderWidth: 1
+                }
+            },
+            scales: {
+                x: {
+                    grid: { color: 'rgba(255, 255, 255, 0.05)' },
+                    ticks: { color: '#a0a0a0', maxTicksLimit: 6 }
+                },
+                y: {
+                    grid: { color: 'rgba(255, 255, 255, 0.05)' },
+                    ticks: { color: '#a0a0a0' }
+                }
+            },
+            animation: false // Disable animation for performance
+        }
+    });
+}
+
+function updateChart() {
+    if (!chartInstance) return;
+
+    // Update Labels
+    chartInstance.data.labels = state.history.labels;
+    
+    // Update Data based on selection
+    let dataset = chartInstance.data.datasets[0];
+    let data = [];
+    let label = '';
+    let color = '';
+
+    switch (state.selectedMetric) {
+        case 'temperature':
+            data = state.history.temperature;
+            label = 'Temperature (°C)';
+            color = '#00d4ff';
+            break;
+        case 'humidity':
+            data = state.history.humidity;
+            label = 'Humidity (%)';
+            color = '#00ff88';
+            break;
+        case 'voltage':
+            data = state.history.voltage;
+            label = 'Voltage (V)';
+            color = '#ffcc00';
+            break;
+    }
+
+    dataset.data = data;
+    dataset.label = label;
+    dataset.borderColor = color;
+    
+    // Dynamic Gradient
+    const ctx = chartInstance.ctx;
+    const gradient = ctx.createLinearGradient(0, 0, 0, 300);
+    gradient.addColorStop(0, hexToRgba(color, 0.4));
+    gradient.addColorStop(1, hexToRgba(color, 0));
+    dataset.backgroundColor = gradient;
+
+    chartInstance.update();
+}
+
+// --- Interaction ---
+window.selectTelemetry = function(metric) {
+    state.selectedMetric = metric;
+    
+    // Update active card styling
+    Object.values(els.cards).forEach(card => card.classList.remove('active'));
+    if(els.cards[metric]) els.cards[metric].classList.add('active');
+
+    // Update Graph Title
+    els.graphTitle.textContent = `${metric.charAt(0).toUpperCase() + metric.slice(1)} History`;
+
+    updateChart();
+}
+
+window.setGraphMode = function(mode) {
+    // Visual toggle only for now
+    const buttons = document.querySelectorAll('.graph-controls .btn-mini');
+    buttons.forEach(btn => btn.classList.remove('active'));
+    event.target.classList.add('active');
+}
+
+// Helper
+function hexToRgba(hex, alpha) {
+    const r = parseInt(hex.slice(1, 3), 16);
+    const g = parseInt(hex.slice(3, 5), 16);
+    const b = parseInt(hex.slice(5, 7), 16);
+    return `rgba(${r}, ${g}, ${b}, ${alpha})`;
+}
+
+// --- Fault Injection ---
+window.injectFault = function(type) {
+    const now = new Date();
+    let message = "";
+    
+    switch(type) {
+        case 'solar-flare':
+            // Massive temperature spike + voltage fluctuation
+            state.data.temperature = 120 + (Math.random() * 20);
+            state.data.voltage = 14 + (Math.random() * 2);
+            message = "MANUAL INJECTION: Solar Flare Event";
+            break;
+        case 'power-drain':
+            // Voltage drop
+            state.data.voltage = 9.5 + (Math.random() * 1);
+            message = "MANUAL INJECTION: Power Drain";
+            break;
+        case 'sensor-fault':
+            // Random null/extreme values
+            state.data.humidity = -50; // Impossible value
+            state.data.temperature = 500; // Sensor error
+            message = "MANUAL INJECTION: Sensor Malfunction";
+            break;
+    }
+    
+    logFault(message, 'critical');
+    updateUI(); // Immediate update to show effect
+}
+
+window.downloadReport = function() {
+    const report = {
+        missionTime: els.missionTime.textContent,
+        health: state.health,
+        currentData: state.data,
+        activeFaults: state.faults,
+        logHistory: state.faultLogHistory
+    };
+    
+    const dataStr = "data:text/json;charset=utf-8," + encodeURIComponent(JSON.stringify(report, null, 2));
+    const downloadAnchorNode = document.createElement('a');
+    downloadAnchorNode.setAttribute("href", dataStr);
+    downloadAnchorNode.setAttribute("download", "satellite_report_" + new Date().toISOString() + ".json");
+    document.body.appendChild(downloadAnchorNode);
+    downloadAnchorNode.click();
+    downloadAnchorNode.remove();
+}
+
+window.clearLog = function() {
+    state.faultLogHistory = [];
+    els.faultLog.innerHTML = '';
+    saveState();
+}
+
+window.exportCSV = function() {
+    let csvContent = "data:text/csv;charset=utf-8,";
+    csvContent += "Timestamp,Message,Type\n";
+    
+    state.faultLogHistory.forEach(entry => {
+        csvContent += `${entry.timestamp},${entry.message},${entry.type}\n`;
+    });
+    
+    const encodedUri = encodeURI(csvContent);
+    const link = document.createElement("a");
+    link.setAttribute("href", encodedUri);
+    link.setAttribute("download", "fault_log.csv");
+    document.body.appendChild(link);
+    link.click();
+    link.remove();
+}
+
+function logFault(message, type = 'info') {
+    const now = new Date();
+    const timestamp = now.toLocaleTimeString();
+    
+    // Add to history
+    state.faultLogHistory.unshift({ timestamp, message, type });
+    
+    // Limit history
+    if (state.faultLogHistory.length > 50) state.faultLogHistory.pop();
+    
+    updateFaultLogUI();
+}
