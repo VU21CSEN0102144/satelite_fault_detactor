@@ -1,0 +1,206 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Satellite Fault Detection & Monitoring</title>
+    <link rel="stylesheet" href="style.css">
+    <!-- Chart.js CDN -->
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <!-- Google Fonts -->
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;600&family=Space+Grotesk:wght@400;600&display=swap" rel="stylesheet">
+    
+    <!-- Firebase SDK -->
+    <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-app-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-database-compat.js"></script>
+</head>
+<body>
+
+    <!-- Background Elements -->
+    <div class="stars"></div>
+    <div class="twinkling"></div>
+
+    <!-- Authentication Page -->
+    <section id="login-section" class="active-section">
+        <div class="login-container glass-panel">
+            <h1>Mission Control</h1>
+            <p>Satellite Telemetry Access</p>
+            <form id="login-form">
+                <div class="input-group">
+                    <input type="text" id="username" placeholder="Operator ID" required>
+                </div>
+                <div class="input-group">
+                    <input type="password" id="password" placeholder="Access Key" required>
+                </div>
+                <button type="submit" class="btn-primary">Initialize Link</button>
+            </form>
+        </div>
+    </section>
+
+    <!-- Dashboard Page -->
+    <section id="dashboard-section" class="hidden-section">
+        <header class="dashboard-header glass-panel">
+            <div class="header-left">
+                <h2>SAT-1 Telemetry</h2>
+                <span class="status-badge" id="system-status">Initializing...</span>
+                <span class="status-badge firebase-status" id="firebase-status" title="Firebase Connection">
+                    <span class="status-indicator">●</span> Cloud
+                </span>
+            </div>
+            <div class="header-right">
+                <div class="sim-controls" style="margin-right: 15px;">
+                    <button id="sim-toggle-btn" class="btn-small" title="Pause/Resume Simulation">⏸</button>
+                    <button id="sim-reset-btn" class="btn-small" title="Reset Data">↺</button>
+                </div>
+                <div class="met-display">
+                    <span class="label">MET</span>
+                    <span id="mission-time">00:00:00</span>
+                </div>
+                <button id="logout-btn" class="btn-small">Abort</button>
+                
+                <!-- Satellite Animation -->
+                <div class="satellite-container">
+                    <div class="satellite">
+                        <div class="solar-panel left"></div>
+                        <div class="sat-body">
+                            <div class="sat-dish"></div>
+                        </div>
+                        <div class="solar-panel right"></div>
+                    </div>
+                </div>
+            </div>
+        </header>
+
+        <main class="dashboard-grid">
+            <!-- Left Column -->
+            <div class="grid-column left-col">
+                <!-- Health Monitor -->
+                <div class="card health-card glass-panel">
+                    <h3>System Health</h3>
+                    <div class="health-indicator">
+                        <svg class="progress-ring" width="120" height="120">
+                            <circle class="progress-ring__circle-bg" stroke="rgba(255,255,255,0.1)" stroke-width="8" fill="transparent" r="52" cx="60" cy="60"/>
+                            <circle class="progress-ring__circle" stroke="#00ff88" stroke-width="8" fill="transparent" r="52" cx="60" cy="60"/>
+                        </svg>
+                        <div class="health-value">
+                            <span id="health-percentage">100</span>%
+                        </div>
+                    </div>
+                    <p id="health-text">Normal Operation</p>
+                    
+                    <div class="health-chart-container" style="position: relative; height: 140px; width: 100%; margin-bottom: 15px;">
+                        <canvas id="healthPieChart"></canvas>
+                    </div>
+                </div>
+
+                <!-- Control Panel -->
+                <div class="card control-panel glass-panel">
+                    <h3>Fault Injection</h3>
+                    <div class="control-grid">
+                        <button class="btn-control danger" onclick="injectFault('solar-flare')">Solar Flare</button>
+                        <button class="btn-control warning" onclick="injectFault('power-drain')">Power Drain</button>
+                        <button class="btn-control warning" onclick="injectFault('sensor-fault')">Sensor Fault</button>
+                    </div>
+                    
+                    <h3 style="margin-top: 20px;">System Controls</h3>
+                    <div class="control-grid">
+                        <button class="btn-control primary" onclick="resetSimulation()">Reset System</button>
+                        <button class="btn-control" onclick="downloadReport()">Download Report</button>
+                    </div>
+                    
+                    <h3 style="margin-top: 20px;">Firebase Debug</h3>
+                    <div style="display: flex; gap: 5px; flex-wrap: wrap; margin-bottom: 10px;">
+                        <button class="btn-control" onclick="testFirebaseManually()" style="flex: 1;">🧪 Test Firebase</button>
+                        <button class="btn-control" onclick="checkFirebaseData()" style="flex: 1;">🔍 Check Data</button>
+                    </div>
+                    <button class="btn-control primary" onclick="syncFromFirebase()" style="width: 100%; margin-bottom: 10px;">🔄 Sync from Firebase</button>
+                    <button class="btn-control" onclick="pushToFirebase()" style="width: 100%; margin-bottom: 10px;">� Push Current to Firebase</button>
+                    <div class="firebase-debug" id="firebase-debug">
+                        <small style="color: var(--text-muted);">Last saved data will appear here...</small>
+                    </div>
+                    
+                    <!-- Live Firebase Data Viewer -->
+                    <div class="firebase-live-viewer" id="firebase-live-viewer" style="margin-top: 15px; padding: 10px; background: rgba(0, 255, 100, 0.05); border: 1px solid rgba(0, 255, 100, 0.2); border-radius: 8px;">
+                        <strong style="color: var(--success-color);">📡 LIVE Firebase Data (Last 5):</strong>
+                        <div id="firebase-live-data" style="font-family: 'Courier New', monospace; font-size: 0.85em; max-height: 250px; overflow-y: auto; margin-top: 8px; line-height: 1.6;">
+                            <div style="color: #888;">⏳ Waiting for data...</div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Right Column -->
+            <div class="grid-column right-col">
+                <!-- Telemetry Gauges -->
+                <div class="telemetry-container">
+                    <div class="card telemetry-card glass-panel" id="card-temp" onclick="selectTelemetry('temperature')">
+                        <div class="card-icon">🌡️</div>
+                        <div class="card-info">
+                            <h3>Temperature</h3>
+                            <div class="value-unit">
+                                <span id="temp-value">--</span>
+                                <span class="unit">°C</span>
+                            </div>
+                        </div>
+                        <div class="status-dot" id="temp-status"></div>
+                    </div>
+
+                    <div class="card telemetry-card glass-panel" id="card-humidity" onclick="selectTelemetry('humidity')">
+                        <div class="card-icon">💧</div>
+                        <div class="card-info">
+                            <h3>Humidity</h3>
+                            <div class="value-unit">
+                                <span id="humidity-value">--</span>
+                                <span class="unit">%</span>
+                            </div>
+                        </div>
+                        <div class="status-dot" id="humidity-status"></div>
+                    </div>
+
+                    <div class="card telemetry-card glass-panel" id="card-voltage" onclick="selectTelemetry('voltage')">
+                        <div class="card-icon">⚡</div>
+                        <div class="card-info">
+                            <h3>Voltage</h3>
+                            <div class="value-unit">
+                                <span id="voltage-value">--</span>
+                                <span class="unit">V</span>
+                            </div>
+                        </div>
+                        <div class="status-dot" id="voltage-status"></div>
+                    </div>
+                </div>
+
+                <!-- Graph Section -->
+                <div class="card graph-card glass-panel">
+                    <div class="graph-header">
+                        <h3 id="graph-title">Live Monitoring</h3>
+                        <div class="graph-controls">
+                            <button class="btn-mini active" onclick="setGraphMode('live')">Live</button>
+                            <button class="btn-mini" onclick="setGraphMode('history')">History</button>
+                        </div>
+                    </div>
+                    <div class="chart-container">
+                        <canvas id="telemetryChart"></canvas>
+                    </div>
+                </div>
+
+                <!-- Fault Log Section -->
+                <div class="card log-card glass-panel">
+                    <div class="log-header">
+                        <h3>Fault Detection Log</h3>
+                        <div class="log-actions">
+                            <button class="btn-mini" onclick="clearLog()">Clear Log</button>
+                            <button class="btn-mini" onclick="exportCSV()">Export CSV</button>
+                        </div>
+                    </div>
+                    <div class="fault-log-container" id="fault-log">
+                        <!-- Log entries will appear here -->
+                    </div>
+                </div>
+            </div>
+        </main>
+    </section>
+
+    <script src="script.js"></script>
+</body>
+</html>

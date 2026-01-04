@@ -295,6 +295,34 @@ function loadRecentDataFromFirebase() {
     }
     
     try {
+        // IMMEDIATELY load and display Firebase /test node values
+        database.ref('test').once('value', (snapshot) => {
+            const data = snapshot.val();
+            if (data) {
+                console.log('✅ LOADING FIREBASE VALUES:', data);
+                
+                // Set the actual display values from Firebase
+                if (data.temperature !== undefined) {
+                    state.data.temperature = Number(data.temperature);
+                }
+                if (data.humidity !== undefined) {
+                    state.data.humidity = Number(data.humidity);
+                }
+                if (data.voltage !== undefined) {
+                    state.data.voltage = Number(data.voltage);
+                }
+                
+                // Update the UI immediately
+                updateUI();
+                
+                console.log('✅ Dashboard now showing Firebase values:', {
+                    temperature: state.data.temperature,
+                    humidity: state.data.humidity,
+                    voltage: state.data.voltage
+                });
+            }
+        });
+        
         // Set up real-time listener for /test node to display actual Firebase values
         database.ref('test').on('value', (snapshot) => {
             const data = snapshot.val();
@@ -430,13 +458,16 @@ function startSimulation() {
         if (!isPaused) updateMET();
     }, 1000);
     
-    simulationInterval = setInterval(() => {
-        if (!isPaused) {
-            simulateData();
-            saveState();
-            saveToFirebase(); // Save to cloud
-        }
-    }, CONFIG.updateInterval);
+    // DISABLED: Let Firebase control the values instead of simulation
+    // simulationInterval = setInterval(() => {
+    //     if (!isPaused) {
+    //         simulateData();
+    //         saveState();
+    //         saveToFirebase(); // Save to cloud
+    //     }
+    // }, CONFIG.updateInterval);
+    
+    console.log('📊 Simulation disabled - showing Firebase values only');
 }
 
 function toggleSimulation() {
