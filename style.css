@@ -158,6 +158,31 @@ body {
     margin-left: 10px;
 }
 
+.firebase-status {
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+}
+
+.status-indicator {
+    font-size: 0.6rem;
+    color: var(--text-muted);
+    animation: pulse-indicator 2s ease-in-out infinite;
+}
+
+.firebase-status.connected .status-indicator {
+    color: var(--success-color);
+}
+
+.firebase-status.disconnected .status-indicator {
+    color: var(--danger-color);
+}
+
+@keyframes pulse-indicator {
+    0%, 100% { opacity: 1; }
+    50% { opacity: 0.5; }
+}
+
 .header-right {
     display: flex;
     align-items: center;

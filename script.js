@@ -1,5 +1,39 @@
 /* Script will go here */
 
+// --- Firebase Configuration ---
+const firebaseConfig = {
+    apiKey: "AIzaSyCqg6M1cyXZgktoK8xOT17IlHHIgz-aO9o",
+    authDomain: "fault-detection-66259.firebaseapp.com",
+    databaseURL: "https://fault-detection-66259-default-rtdb.asia-southeast1.firebasedatabase.app",
+    projectId: "fault-detection-66259",
+    storageBucket: "fault-detection-66259.firebasestorage.app",
+    messagingSenderId: "855923820910",
+    appId: "1:855923820910:web:79a86ffce76d873646197f",
+    measurementId: "G-MV3V54ZJDK"
+};
+
+// Initialize Firebase
+firebase.initializeApp(firebaseConfig);
+const database = firebase.database();
+
+// Check Firebase connection
+const firebaseStatusEl = document.getElementById('firebase-status');
+database.ref('.info/connected').on('value', (snapshot) => {
+    if (snapshot.val() === true) {
+        console.log('Firebase: Connected');
+        if (firebaseStatusEl) {
+            firebaseStatusEl.classList.add('connected');
+            firebaseStatusEl.classList.remove('disconnected');
+        }
+    } else {
+        console.log('Firebase: Disconnected');
+        if (firebaseStatusEl) {
+            firebaseStatusEl.classList.add('disconnected');
+            firebaseStatusEl.classList.remove('connected');
+        }
+    }
+});
+
 // --- Configuration ---
 const CONFIG = {
     updateInterval: 2000, // ms
@@ -75,6 +109,7 @@ document.addEventListener('DOMContentLoaded', () => {
     setupEventListeners();
     initChart();
     initHealthPieChart(); // Initialize pie chart
+    loadRecentDataFromFirebase(); // Load recent data from cloud
     
     // Check if we were already logged in (persisted session)
     if (state.isLoggedIn) {
@@ -140,6 +175,39 @@ function saveState() {
     localStorage.setItem(CONFIG.storageKey, JSON.stringify(state));
 }
 
+function saveToFirebase() {
+    // Save current telemetry data to Firebase
+    const timestamp = new Date().toISOString();
+    const dataRef = database.ref('telemetry/' + Date.now());
+    
+    dataRef.set({
+        timestamp: timestamp,
+        temperature: state.data.temperature,
+        humidity: state.data.humidity,
+        voltage: state.data.voltage,
+        health: state.health,
+        missionTime: els.missionTime?.textContent || '00:00:00'
+    }).catch(error => {
+        console.error("Error saving to Firebase:", error);
+    });
+}
+
+function saveFaultToFirebase(fault) {
+    // Save fault logs to Firebase
+    const faultRef = database.ref('faults/' + Date.now());
+    
+    faultRef.set({
+        timestamp: new Date().toISOString(),
+        message: fault.message,
+        type: fault.type,
+        temperature: state.data.temperature,
+        humidity: state.data.humidity,
+        voltage: state.data.voltage
+    }).catch(error => {
+        console.error("Error saving fault to Firebase:", error);
+    });
+}
+
 function loadState() {
     const stored = localStorage.getItem(CONFIG.storageKey);
     if (stored) {
@@ -151,6 +219,19 @@ function loadState() {
             console.error("Failed to load state", e);
         }
     }
+}
+
+function loadRecentDataFromFirebase() {
+    // Load last 10 telemetry records from Firebase
+    database.ref('telemetry').limitToLast(10).once('value', (snapshot) => {
+        const data = snapshot.val();
+        if (data) {
+            console.log("Loaded recent telemetry from Firebase:", data);
+            // You can process and display this data if needed
+        }
+    }).catch(error => {
+        console.error("Error loading from Firebase:", error);
+    });
 }
 
 // --- Simulation Logic ---
@@ -170,7 +251,8 @@ function startSimulation() {
     simulationInterval = setInterval(() => {
         if (!isPaused) {
             simulateData();
-            saveState(); 
+            saveState();
+            saveToFirebase(); // Save to cloud
         }
     }, CONFIG.updateInterval);
 }
@@ -705,10 +787,14 @@ function logFault(message, type = 'info') {
     const timestamp = now.toLocaleTimeString();
     
     // Add to history
-    state.faultLogHistory.unshift({ timestamp, message, type });
+    const faultEntry = { timestamp, message, type };
+    state.faultLogHistory.unshift(faultEntry);
     
     // Limit history
     if (state.faultLogHistory.length > 50) state.faultLogHistory.pop();
+    
+    // Save to Firebase
+    saveFaultToFirebase(faultEntry);
     
     updateFaultLogUI();
 }
