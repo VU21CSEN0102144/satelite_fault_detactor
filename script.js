@@ -32,11 +32,32 @@ function setupFirebaseStatusMonitor() {
             console.log('Firebase: Connected ✓');
             firebaseStatusEl.classList.add('connected');
             firebaseStatusEl.classList.remove('disconnected');
+            
+            // Test write on connection
+            testFirebaseWrite();
         } else {
             console.log('Firebase: Disconnected ✗');
             firebaseStatusEl.classList.add('disconnected');
             firebaseStatusEl.classList.remove('connected');
         }
+    });
+}
+
+// Test Firebase write/read
+function testFirebaseWrite() {
+    console.log('🧪 Testing Firebase write...');
+    const testRef = database.ref('test/connection');
+    testRef.set({
+        timestamp: new Date().toISOString(),
+        message: 'Connection test successful'
+    }).then(() => {
+        console.log('✅ Firebase write test PASSED');
+        // Now read it back
+        testRef.once('value', (snapshot) => {
+            console.log('✅ Firebase read test PASSED:', snapshot.val());
+        });
+    }).catch(error => {
+        console.error('❌ Firebase write test FAILED:', error);
     });
 }
 
@@ -877,3 +898,53 @@ function logFault(message, type = 'info') {
     
     updateFaultLogUI();
 }
+
+// Manual Firebase Test Function
+window.testFirebaseManually = function() {
+    console.log('🔬 Manual Firebase Test Started...');
+    updateFirebaseDebug('TEST', { 
+        temperature: 99.99, 
+        humidity: 88.88, 
+        voltage: 77.77, 
+        health: 66 
+    });
+    
+    if (!database) {
+        alert('❌ Firebase not initialized!');
+        console.error('Database object is null');
+        return;
+    }
+    
+    const testData = {
+        timestamp: new Date().toISOString(),
+        temperature: 99.99,
+        humidity: 88.88,
+        voltage: 77.77,
+        health: 66,
+        missionTime: 'TEST',
+        testNote: 'This is a manual test entry'
+    };
+    
+    const testKey = 'manual_test_' + Date.now();
+    console.log('📤 Writing to Firebase with key:', testKey);
+    console.log('📦 Data:', testData);
+    
+    database.ref('telemetry/' + testKey).set(testData)
+        .then(() => {
+            console.log('✅ Manual test write SUCCESS!');
+            alert('✅ Data written successfully! Check Firebase Console.');
+            
+            // Read it back immediately
+            return database.ref('telemetry/' + testKey).once('value');
+        })
+        .then((snapshot) => {
+            console.log('✅ Manual test read SUCCESS!');
+            console.log('📥 Read back data:', snapshot.val());
+            updateFirebaseDebug('READ SUCCESS', snapshot.val());
+        })
+        .catch((error) => {
+            console.error('❌ Manual test FAILED:', error);
+            alert('❌ Firebase error: ' + error.message);
+            updateFirebaseDebug('ERROR', error.message);
+        });
+};
