@@ -289,6 +289,7 @@ function loadRecentDataFromFirebase() {
             const data = snapshot.val();
             if (data) {
                 console.log("✓ Loaded recent telemetry from Firebase:", Object.keys(data).length, "records");
+                console.table(data); // Display in table format
                 // You can process and display this data if needed
             } else {
                 console.log("ℹ No previous telemetry data in Firebase");
@@ -296,6 +297,15 @@ function loadRecentDataFromFirebase() {
         }).catch(error => {
             console.error("✗ Error loading from Firebase:", error);
         });
+        
+        // Set up real-time listener for new data
+        database.ref('telemetry').limitToLast(1).on('child_added', (snapshot) => {
+            const data = snapshot.val();
+            console.log('🔥 NEW DATA ADDED TO FIREBASE:', snapshot.key);
+            console.log('📊 Data:', data);
+            updateFirebaseDebug('LIVE UPDATE', data);
+        });
+        
     } catch (error) {
         console.error("✗ Firebase load exception:", error);
     }
@@ -330,6 +340,38 @@ function updateFirebaseDebug(status, data) {
                 hr.nextSibling.remove();
             }
             hr.remove();
+        }
+    }
+    
+    // Also update live viewer
+    updateLiveViewer(status, data);
+}
+
+// Update the live Firebase data viewer
+function updateLiveViewer(status, data) {
+    const liveEl = document.getElementById('firebase-live-data');
+    if (!liveEl) return;
+    
+    const timestamp = new Date().toLocaleTimeString();
+    
+    if (typeof data === 'object' && data.temperature !== undefined) {
+        const entry = `<div style="padding: 4px; border-left: 3px solid var(--success-color); margin-bottom: 6px; background: rgba(0,255,100,0.05);">
+            <span style="color: #00ff88;">⚡ ${timestamp}</span><br>
+            <span style="color: #4da6ff;">🌡️ Temp: ${data.temperature}°C</span> | 
+            <span style="color: #ff88ff;">💧 Hum: ${data.humidity}%</span> | 
+            <span style="color: #ffaa00;">⚡ Volt: ${data.voltage}V</span><br>
+            <span style="color: #00ff88;">❤️ Health: ${data.health}%</span>
+        </div>`;
+        
+        // Add to top
+        liveEl.innerHTML = entry + liveEl.innerHTML;
+        
+        // Keep only last 5 entries
+        const entries = liveEl.querySelectorAll('div[style*="border-left"]');
+        if (entries.length > 5) {
+            for (let i = 5; i < entries.length; i++) {
+                entries[i].remove();
+            }
         }
     }
 }
@@ -946,5 +988,69 @@ window.testFirebaseManually = function() {
             console.error('❌ Manual test FAILED:', error);
             alert('❌ Firebase error: ' + error.message);
             updateFirebaseDebug('ERROR', error.message);
+        });
+};
+
+// Check what's actually in Firebase right now
+window.checkFirebaseData = function() {
+    console.log('🔍 Checking Firebase Database...');
+    
+    if (!database) {
+        alert('❌ Firebase not initialized!');
+        return;
+    }
+    
+    // Check all nodes
+    const liveEl = document.getElementById('firebase-live-data');
+    if (liveEl) {
+        liveEl.innerHTML = '<div style="color: #ffaa00;">🔍 Scanning Firebase database...</div>';
+    }
+    
+    // Check /telemetry node
+    database.ref('telemetry').limitToLast(5).once('value')
+        .then((snapshot) => {
+            const data = snapshot.val();
+            console.log('📊 /telemetry node:', data);
+            
+            if (data) {
+                console.log('✅ Found', Object.keys(data).length, 'entries in /telemetry');
+                console.table(data);
+                
+                if (liveEl) {
+                    let html = '<div style="color: #00ff88;"><strong>✅ /telemetry node (Last 5):</strong></div>';
+                    Object.entries(data).forEach(([key, value]) => {
+                        html += `<div style="padding: 4px; border-left: 3px solid #00ff88; margin: 4px 0; background: rgba(0,255,100,0.05);">
+                            <strong>${key}</strong><br>
+                            Temp: ${value.temperature}°C | Hum: ${value.humidity}% | Volt: ${value.voltage}V<br>
+                            Health: ${value.health}% | Time: ${value.missionTime}
+                        </div>`;
+                    });
+                    liveEl.innerHTML = html;
+                }
+                
+                alert(`✅ Found ${Object.keys(data).length} entries in /telemetry!\nCheck console for details.`);
+            } else {
+                console.warn('⚠️ /telemetry node is EMPTY!');
+                if (liveEl) {
+                    liveEl.innerHTML = '<div style="color: #ff4d4d;">⚠️ No data in /telemetry node!</div>';
+                }
+                alert('⚠️ No data found in /telemetry node!\nIs the simulation running?');
+            }
+        })
+        .catch((error) => {
+            console.error('❌ Error reading /telemetry:', error);
+            alert('❌ Error: ' + error.message);
+        });
+    
+    // Also check /test node
+    database.ref('test').once('value')
+        .then((snapshot) => {
+            const data = snapshot.val();
+            if (data) {
+                console.log('📊 /test node:', data);
+            }
+        })
+        .catch((error) => {
+            console.error('❌ Error reading /test:', error);
         });
 };

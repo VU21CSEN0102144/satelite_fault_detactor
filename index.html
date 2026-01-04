@@ -110,8 +110,17 @@
                     
                     <h3 style="margin-top: 20px;">Firebase Debug</h3>
                     <button class="btn-control" onclick="testFirebaseManually()" style="margin-bottom: 10px;">🧪 Test Firebase Now</button>
+                    <button class="btn-control" onclick="checkFirebaseData()" style="margin-bottom: 10px; margin-left: 5px;">🔍 Check Firebase Data</button>
                     <div class="firebase-debug" id="firebase-debug">
                         <small style="color: var(--text-muted);">Last saved data will appear here...</small>
+                    </div>
+                    
+                    <!-- Live Firebase Data Viewer -->
+                    <div class="firebase-live-viewer" id="firebase-live-viewer" style="margin-top: 15px; padding: 10px; background: rgba(0, 255, 100, 0.05); border: 1px solid rgba(0, 255, 100, 0.2); border-radius: 8px;">
+                        <strong style="color: var(--success-color);">📡 LIVE Firebase Data (Last 5):</strong>
+                        <div id="firebase-live-data" style="font-family: 'Courier New', monospace; font-size: 0.85em; max-height: 250px; overflow-y: auto; margin-top: 8px; line-height: 1.6;">
+                            <div style="color: #888;">⏳ Waiting for data...</div>
+                        </div>
                     </div>
                 </div>
             </div>
