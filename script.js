@@ -90,9 +90,9 @@ let state = {
     missionStartTime: null,
     selectedMetric: 'temperature', // temperature, humidity, voltage
     data: {
-        temperature: 25.0,
-        humidity: 10.0,
-        voltage: 12.0
+        temperature: 26.0,  // Firebase value
+        humidity: 66.0,     // Firebase value
+        voltage: 1.49       // Firebase value
     },
     history: {
         labels: [],
@@ -175,8 +175,27 @@ function login() {
     state.missionStartTime = new Date(); // Reset time on new login
     saveState();
     
-    transitionToDashboard();
-    startSimulation();
+    // Load Firebase data FIRST, then show dashboard
+    if (database) {
+        database.ref('test').once('value', (snapshot) => {
+            const data = snapshot.val();
+            if (data) {
+                console.log('✅ Loading Firebase values on login:', data);
+                state.data.temperature = Number(data.temperature) || 26;
+                state.data.humidity = Number(data.humidity) || 66;
+                state.data.voltage = Number(data.voltage) || 1.49;
+            }
+            transitionToDashboard();
+            startSimulation();
+        }).catch((error) => {
+            console.error('Error loading Firebase data:', error);
+            transitionToDashboard();
+            startSimulation();
+        });
+    } else {
+        transitionToDashboard();
+        startSimulation();
+    }
 }
 
 function restoreSession() {
@@ -514,6 +533,10 @@ function updateMET() {
 
 // --- Data Simulation ---
 function simulateData() {
+    // DISABLED - Using Firebase values only
+    console.log('⚠️ Simulation disabled - displaying Firebase data only');
+    return;
+    
     // Simulate realistic drift and noise
     
     // Temperature: Random walk
