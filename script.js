@@ -191,22 +191,28 @@ function saveToFirebase() {
     try {
         // Save current telemetry data to Firebase
         const timestamp = new Date().toISOString();
-        const dataRef = database.ref('telemetry/' + Date.now());
+        const key = Date.now();
+        const dataRef = database.ref('telemetry/' + key);
         
-        dataRef.set({
+        const dataToSave = {
             timestamp: timestamp,
             temperature: parseFloat(state.data.temperature.toFixed(2)),
             humidity: parseFloat(state.data.humidity.toFixed(2)),
             voltage: parseFloat(state.data.voltage.toFixed(2)),
             health: Math.round(state.health),
             missionTime: els.missionTime?.textContent || '00:00:00'
-        }).then(() => {
-            console.log('✓ Data saved to Firebase');
+        };
+        
+        dataRef.set(dataToSave).then(() => {
+            console.log('✓ Data saved to Firebase:', key);
+            updateFirebaseDebug('Saved', dataToSave);
         }).catch(error => {
             console.error("✗ Error saving to Firebase:", error);
+            updateFirebaseDebug('Error', error.message);
         });
     } catch (error) {
         console.error("✗ Firebase save exception:", error);
+        updateFirebaseDebug('Exception', error.message);
     }
 }
 
@@ -271,6 +277,39 @@ function loadRecentDataFromFirebase() {
         });
     } catch (error) {
         console.error("✗ Firebase load exception:", error);
+    }
+}
+
+function updateFirebaseDebug(status, data) {
+    const debugEl = document.getElementById('firebase-debug');
+    if (!debugEl) return;
+    
+    const timestamp = new Date().toLocaleTimeString();
+    let content = `<div style="margin-bottom: 5px;"><strong>${timestamp} - ${status}</strong></div>`;
+    
+    if (typeof data === 'object') {
+        content += `<div style="margin-left: 10px; color: #00ff88;">`;
+        content += `T: ${data.temperature}°C | `;
+        content += `H: ${data.humidity}% | `;
+        content += `V: ${data.voltage}V | `;
+        content += `Health: ${data.health}%`;
+        content += `</div>`;
+    } else {
+        content += `<div style="margin-left: 10px; color: #ff4d4d;">${data}</div>`;
+    }
+    
+    debugEl.innerHTML = content + '<hr style="border-color: rgba(255,255,255,0.1); margin: 10px 0;">' + debugEl.innerHTML;
+    
+    // Keep only last 5 entries
+    const entries = debugEl.querySelectorAll('hr');
+    if (entries.length > 5) {
+        for (let i = 5; i < entries.length; i++) {
+            const hr = entries[i];
+            while (hr.nextSibling) {
+                hr.nextSibling.remove();
+            }
+            hr.remove();
+        }
     }
 }
 

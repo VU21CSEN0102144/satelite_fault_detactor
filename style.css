@@ -307,6 +307,19 @@ body {
     padding: 20px;
 }
 
+.firebase-debug {
+    margin-top: 10px;
+    padding: 10px;
+    background: rgba(0, 0, 0, 0.3);
+    border-radius: 6px;
+    font-family: monospace;
+    font-size: 0.75rem;
+    color: var(--primary-color);
+    max-height: 150px;
+    overflow-y: auto;
+    line-height: 1.4;
+}
+
 .control-grid {
     display: grid;
     grid-template-columns: 1fr;
