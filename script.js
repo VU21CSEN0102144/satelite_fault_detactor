@@ -331,6 +331,9 @@ function loadRecentDataFromFirebase() {
                     state.data.voltage = Number(data.voltage);
                 }
                 
+                // Add to history for graphs
+                addToHistory();
+                
                 // Update the UI immediately
                 updateUI();
                 
@@ -358,6 +361,9 @@ function loadRecentDataFromFirebase() {
                 if (data.voltage !== undefined) {
                     state.data.voltage = Number(data.voltage);
                 }
+                
+                // Add to history for graphs
+                addToHistory();
                 
                 // Update the UI with Firebase values
                 updateUI();
@@ -395,6 +401,25 @@ function loadRecentDataFromFirebase() {
         
     } catch (error) {
         console.error("✗ Firebase load exception:", error);
+    }
+}
+
+// Helper function to add current values to history
+function addToHistory() {
+    const now = new Date();
+    const timeLabel = `${now.getHours()}:${String(now.getMinutes()).padStart(2, '0')}:${String(now.getSeconds()).padStart(2, '0')}`;
+    
+    state.history.labels.push(timeLabel);
+    state.history.temperature.push(state.data.temperature);
+    state.history.humidity.push(state.data.humidity);
+    state.history.voltage.push(state.data.voltage);
+
+    // Maintain fixed history size
+    if (state.history.labels.length > CONFIG.maxHistory) {
+        state.history.labels.shift();
+        state.history.temperature.shift();
+        state.history.humidity.shift();
+        state.history.voltage.shift();
     }
 }
 
@@ -477,16 +502,15 @@ function startSimulation() {
         if (!isPaused) updateMET();
     }, 1000);
     
-    // DISABLED: Let Firebase control the values instead of simulation
-    // simulationInterval = setInterval(() => {
-    //     if (!isPaused) {
-    //         simulateData();
-    //         saveState();
-    //         saveToFirebase(); // Save to cloud
-    //     }
-    // }, CONFIG.updateInterval);
+    // Add Firebase values to history every 2 seconds for graph
+    simulationInterval = setInterval(() => {
+        if (!isPaused) {
+            addToHistory(); // Add current Firebase values to graph
+            saveState();
+        }
+    }, CONFIG.updateInterval);
     
-    console.log('📊 Simulation disabled - showing Firebase values only');
+    console.log('📊 Displaying Firebase values with live graph updates');
 }
 
 function toggleSimulation() {
@@ -496,24 +520,57 @@ function toggleSimulation() {
 }
 
 function resetSimulation() {
-    // Reset data to nominal
-    state.data = {
-        temperature: 25.0,
-        humidity: 10.0,
-        voltage: 12.0
-    };
-    state.history = {
-        labels: [],
-        temperature: [],
-        humidity: [],
-        voltage: []
-    };
-    state.faultLogHistory = []; // Clear log on reset
-    state.missionStartTime = new Date();
-    
-    updateUI();
-    updateFaultLogUI(); // Clear UI log
-    saveState();
+    // Reset data to Firebase values (not simulated values)
+    if (database) {
+        database.ref('test').once('value', (snapshot) => {
+            const data = snapshot.val();
+            if (data) {
+                state.data = {
+                    temperature: Number(data.temperature) || 26.0,
+                    humidity: Number(data.humidity) || 66.0,
+                    voltage: Number(data.voltage) || 1.49
+                };
+            } else {
+                // Fallback to Firebase default values
+                state.data = {
+                    temperature: 26.0,
+                    humidity: 66.0,
+                    voltage: 1.49
+                };
+            }
+            state.history = {
+                labels: [],
+                temperature: [],
+                humidity: [],
+                voltage: []
+            };
+            state.faultLogHistory = []; // Clear log on reset
+            state.missionStartTime = new Date();
+            
+            updateUI();
+            updateFaultLogUI(); // Clear UI log
+            saveState();
+        });
+    } else {
+        // Fallback if Firebase not available
+        state.data = {
+            temperature: 26.0,
+            humidity: 66.0,
+            voltage: 1.49
+        };
+        state.history = {
+            labels: [],
+            temperature: [],
+            humidity: [],
+            voltage: []
+        };
+        state.faultLogHistory = []; // Clear log on reset
+        state.missionStartTime = new Date();
+        
+        updateUI();
+        updateFaultLogUI(); // Clear UI log
+        saveState();
+    }
 }
 
 // --- MET Update ---
