@@ -46,12 +46,23 @@ function setupFirebaseStatusMonitor() {
 // Test Firebase write/read
 function testFirebaseWrite() {
     console.log('🧪 Testing Firebase write...');
-    const testRef = database.ref('test/connection');
-    testRef.set({
-        timestamp: new Date().toISOString(),
-        message: 'Connection test successful'
-    }).then(() => {
+    
+    // Write test data to /test node (this will update the display)
+    const testData = {
+        temperature: 26,
+        humidity: 66,
+        voltage: 1.49,
+        current: 0.01,
+        temperature_status: "NORMAL",
+        voltage_status: "NORMAL",
+        current_status: "NORMAL",
+        timestamp: new Date().toISOString()
+    };
+    
+    const testRef = database.ref('test');
+    testRef.set(testData).then(() => {
         console.log('✅ Firebase write test PASSED');
+        console.log('📊 Test data written to /test:', testData);
         // Now read it back
         testRef.once('value', (snapshot) => {
             console.log('✅ Firebase read test PASSED:', snapshot.val());
@@ -284,13 +295,42 @@ function loadRecentDataFromFirebase() {
     }
     
     try {
-        // Load last 10 telemetry records from Firebase
+        // Set up real-time listener for /test node to display actual Firebase values
+        database.ref('test').on('value', (snapshot) => {
+            const data = snapshot.val();
+            if (data) {
+                console.log('🔥 FIREBASE DATA UPDATE from /test:', data);
+                
+                // Update the actual display values with Firebase data
+                if (data.temperature !== undefined) {
+                    state.data.temperature = Number(data.temperature);
+                }
+                if (data.humidity !== undefined) {
+                    state.data.humidity = Number(data.humidity);
+                }
+                if (data.voltage !== undefined) {
+                    state.data.voltage = Number(data.voltage);
+                }
+                
+                // Update the UI with Firebase values
+                updateUI();
+                
+                // Show in debug panel
+                updateFirebaseDebug('FIREBASE SYNC', {
+                    temperature: state.data.temperature,
+                    humidity: state.data.humidity,
+                    voltage: state.data.voltage,
+                    health: state.health
+                });
+            }
+        });
+        
+        // Also listen to telemetry for historical data
         database.ref('telemetry').limitToLast(10).once('value', (snapshot) => {
             const data = snapshot.val();
             if (data) {
                 console.log("✓ Loaded recent telemetry from Firebase:", Object.keys(data).length, "records");
                 console.table(data); // Display in table format
-                // You can process and display this data if needed
             } else {
                 console.log("ℹ No previous telemetry data in Firebase");
             }
@@ -298,7 +338,7 @@ function loadRecentDataFromFirebase() {
             console.error("✗ Error loading from Firebase:", error);
         });
         
-        // Set up real-time listener for new data
+        // Set up real-time listener for new telemetry data
         database.ref('telemetry').limitToLast(1).on('child_added', (snapshot) => {
             const data = snapshot.val();
             console.log('🔥 NEW DATA ADDED TO FIREBASE:', snapshot.key);
@@ -1052,5 +1092,77 @@ window.checkFirebaseData = function() {
         })
         .catch((error) => {
             console.error('❌ Error reading /test:', error);
+        });
+};
+
+// Sync current display values from Firebase /test node
+window.syncFromFirebase = function() {
+    console.log('🔄 Syncing from Firebase...');
+    
+    if (!database) {
+        alert('❌ Firebase not initialized!');
+        return;
+    }
+    
+    database.ref('test').once('value')
+        .then((snapshot) => {
+            const data = snapshot.val();
+            if (data) {
+                console.log('✅ Synced data from Firebase:', data);
+                
+                // Update state with Firebase values
+                if (data.temperature !== undefined) {
+                    state.data.temperature = Number(data.temperature);
+                }
+                if (data.humidity !== undefined) {
+                    state.data.humidity = Number(data.humidity);
+                }
+                if (data.voltage !== undefined) {
+                    state.data.voltage = Number(data.voltage);
+                }
+                
+                // Update UI
+                updateUI();
+                
+                alert(`✅ Synced from Firebase!\n\nTemperature: ${data.temperature}°C\nHumidity: ${data.humidity}%\nVoltage: ${data.voltage}V`);
+            } else {
+                alert('⚠️ No data in /test node!');
+            }
+        })
+        .catch((error) => {
+            console.error('❌ Error syncing from Firebase:', error);
+            alert('❌ Error: ' + error.message);
+        });
+};
+
+// Push current simulated values to Firebase /test node
+window.pushToFirebase = function() {
+    console.log('📤 Pushing current values to Firebase...');
+    
+    if (!database) {
+        alert('❌ Firebase not initialized!');
+        return;
+    }
+    
+    const currentData = {
+        temperature: state.data.temperature,
+        humidity: state.data.humidity,
+        voltage: state.data.voltage,
+        current: 0.01,
+        temperature_status: state.data.temperature > 60 ? "HIGH" : state.data.temperature < 0 ? "LOW" : "NORMAL",
+        voltage_status: state.data.voltage < 3.5 ? "LOW" : "NORMAL",
+        current_status: "NORMAL",
+        timestamp: new Date().toISOString()
+    };
+    
+    database.ref('test').set(currentData)
+        .then(() => {
+            console.log('✅ Pushed to Firebase:', currentData);
+            alert(`✅ Data pushed to Firebase!\n\nTemperature: ${currentData.temperature.toFixed(2)}°C\nHumidity: ${currentData.humidity.toFixed(2)}%\nVoltage: ${currentData.voltage.toFixed(2)}V`);
+            updateFirebaseDebug('PUSHED', currentData);
+        })
+        .catch((error) => {
+            console.error('❌ Error pushing to Firebase:', error);
+            alert('❌ Error: ' + error.message);
         });
 };

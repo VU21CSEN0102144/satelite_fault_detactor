@@ -109,8 +109,12 @@
                     </div>
                     
                     <h3 style="margin-top: 20px;">Firebase Debug</h3>
-                    <button class="btn-control" onclick="testFirebaseManually()" style="margin-bottom: 10px;">🧪 Test Firebase Now</button>
-                    <button class="btn-control" onclick="checkFirebaseData()" style="margin-bottom: 10px; margin-left: 5px;">🔍 Check Firebase Data</button>
+                    <div style="display: flex; gap: 5px; flex-wrap: wrap; margin-bottom: 10px;">
+                        <button class="btn-control" onclick="testFirebaseManually()" style="flex: 1;">🧪 Test Firebase</button>
+                        <button class="btn-control" onclick="checkFirebaseData()" style="flex: 1;">🔍 Check Data</button>
+                    </div>
+                    <button class="btn-control primary" onclick="syncFromFirebase()" style="width: 100%; margin-bottom: 10px;">🔄 Sync from Firebase</button>
+                    <button class="btn-control" onclick="pushToFirebase()" style="width: 100%; margin-bottom: 10px;">� Push Current to Firebase</button>
                     <div class="firebase-debug" id="firebase-debug">
                         <small style="color: var(--text-muted);">Last saved data will appear here...</small>
                     </div>
