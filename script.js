@@ -13,26 +13,32 @@ const firebaseConfig = {
 };
 
 // Initialize Firebase
-firebase.initializeApp(firebaseConfig);
-const database = firebase.database();
+let database;
+try {
+    firebase.initializeApp(firebaseConfig);
+    database = firebase.database();
+    console.log('Firebase initialized successfully');
+} catch (error) {
+    console.error('Firebase initialization error:', error);
+}
 
-// Check Firebase connection
-const firebaseStatusEl = document.getElementById('firebase-status');
-database.ref('.info/connected').on('value', (snapshot) => {
-    if (snapshot.val() === true) {
-        console.log('Firebase: Connected');
-        if (firebaseStatusEl) {
+// Check Firebase connection (will be set up after DOM loads)
+function setupFirebaseStatusMonitor() {
+    const firebaseStatusEl = document.getElementById('firebase-status');
+    if (!database || !firebaseStatusEl) return;
+    
+    database.ref('.info/connected').on('value', (snapshot) => {
+        if (snapshot.val() === true) {
+            console.log('Firebase: Connected ✓');
             firebaseStatusEl.classList.add('connected');
             firebaseStatusEl.classList.remove('disconnected');
-        }
-    } else {
-        console.log('Firebase: Disconnected');
-        if (firebaseStatusEl) {
+        } else {
+            console.log('Firebase: Disconnected ✗');
             firebaseStatusEl.classList.add('disconnected');
             firebaseStatusEl.classList.remove('connected');
         }
-    }
-});
+    });
+}
 
 // --- Configuration ---
 const CONFIG = {
@@ -109,6 +115,7 @@ document.addEventListener('DOMContentLoaded', () => {
     setupEventListeners();
     initChart();
     initHealthPieChart(); // Initialize pie chart
+    setupFirebaseStatusMonitor(); // Set up Firebase connection monitor
     loadRecentDataFromFirebase(); // Load recent data from cloud
     
     // Check if we were already logged in (persisted session)
@@ -176,36 +183,58 @@ function saveState() {
 }
 
 function saveToFirebase() {
-    // Save current telemetry data to Firebase
-    const timestamp = new Date().toISOString();
-    const dataRef = database.ref('telemetry/' + Date.now());
+    if (!database) {
+        console.warn('Firebase not initialized, skipping save');
+        return;
+    }
     
-    dataRef.set({
-        timestamp: timestamp,
-        temperature: state.data.temperature,
-        humidity: state.data.humidity,
-        voltage: state.data.voltage,
-        health: state.health,
-        missionTime: els.missionTime?.textContent || '00:00:00'
-    }).catch(error => {
-        console.error("Error saving to Firebase:", error);
-    });
+    try {
+        // Save current telemetry data to Firebase
+        const timestamp = new Date().toISOString();
+        const dataRef = database.ref('telemetry/' + Date.now());
+        
+        dataRef.set({
+            timestamp: timestamp,
+            temperature: parseFloat(state.data.temperature.toFixed(2)),
+            humidity: parseFloat(state.data.humidity.toFixed(2)),
+            voltage: parseFloat(state.data.voltage.toFixed(2)),
+            health: Math.round(state.health),
+            missionTime: els.missionTime?.textContent || '00:00:00'
+        }).then(() => {
+            console.log('✓ Data saved to Firebase');
+        }).catch(error => {
+            console.error("✗ Error saving to Firebase:", error);
+        });
+    } catch (error) {
+        console.error("✗ Firebase save exception:", error);
+    }
 }
 
 function saveFaultToFirebase(fault) {
-    // Save fault logs to Firebase
-    const faultRef = database.ref('faults/' + Date.now());
+    if (!database) {
+        console.warn('Firebase not initialized, skipping fault save');
+        return;
+    }
     
-    faultRef.set({
-        timestamp: new Date().toISOString(),
-        message: fault.message,
-        type: fault.type,
-        temperature: state.data.temperature,
-        humidity: state.data.humidity,
-        voltage: state.data.voltage
-    }).catch(error => {
-        console.error("Error saving fault to Firebase:", error);
-    });
+    try {
+        // Save fault logs to Firebase
+        const faultRef = database.ref('faults/' + Date.now());
+        
+        faultRef.set({
+            timestamp: new Date().toISOString(),
+            message: fault.message,
+            type: fault.type,
+            temperature: parseFloat(state.data.temperature.toFixed(2)),
+            humidity: parseFloat(state.data.humidity.toFixed(2)),
+            voltage: parseFloat(state.data.voltage.toFixed(2))
+        }).then(() => {
+            console.log('✓ Fault saved to Firebase:', fault.type);
+        }).catch(error => {
+            console.error("✗ Error saving fault to Firebase:", error);
+        });
+    } catch (error) {
+        console.error("✗ Firebase fault save exception:", error);
+    }
 }
 
 function loadState() {
@@ -222,19 +251,30 @@ function loadState() {
 }
 
 function loadRecentDataFromFirebase() {
-    // Load last 10 telemetry records from Firebase
-    database.ref('telemetry').limitToLast(10).once('value', (snapshot) => {
-        const data = snapshot.val();
-        if (data) {
-            console.log("Loaded recent telemetry from Firebase:", data);
-            // You can process and display this data if needed
-        }
-    }).catch(error => {
-        console.error("Error loading from Firebase:", error);
-    });
+    if (!database) {
+        console.warn('Firebase not initialized, skipping data load');
+        return;
+    }
+    
+    try {
+        // Load last 10 telemetry records from Firebase
+        database.ref('telemetry').limitToLast(10).once('value', (snapshot) => {
+            const data = snapshot.val();
+            if (data) {
+                console.log("✓ Loaded recent telemetry from Firebase:", Object.keys(data).length, "records");
+                // You can process and display this data if needed
+            } else {
+                console.log("ℹ No previous telemetry data in Firebase");
+            }
+        }).catch(error => {
+            console.error("✗ Error loading from Firebase:", error);
+        });
+    } catch (error) {
+        console.error("✗ Firebase load exception:", error);
+    }
 }
 
-// --- Simulation Logic ---
+// --- Simulation Logic ---// --- Simulation Logic ---
 let isPaused = false;
 
 function startSimulation() {
