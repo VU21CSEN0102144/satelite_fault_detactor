@@ -90,9 +90,9 @@ let state = {
     missionStartTime: null,
     selectedMetric: 'temperature', // temperature, humidity, voltage
     data: {
-        temperature: 29.1,  // Firebase value from /data/
-        humidity: 0,        // Not in Firebase, using default
-        voltage: 0          // Firebase value from /data/
+        temperature: 28.9,  // Firebase value from /data/
+        humidity: 53,       // Firebase value from /data/
+        voltage: 1.49       // Firebase value from /data/
     },
     history: {
         labels: [],
