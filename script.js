@@ -2,14 +2,14 @@
 
 // --- Firebase Configuration ---
 const firebaseConfig = {
-    apiKey: "AIzaSyCqg6M1cyXZgktoK8xOT17IlHHIgz-aO9o",
-    authDomain: "fault-detection-66259.firebaseapp.com",
-    databaseURL: "https://fault-detection-66259-default-rtdb.asia-southeast1.firebasedatabase.app",
-    projectId: "fault-detection-66259",
-    storageBucket: "fault-detection-66259.firebasestorage.app",
-    messagingSenderId: "855923820910",
-    appId: "1:855923820910:web:79a86ffce76d873646197f",
-    measurementId: "G-MV3V54ZJDK"
+    apiKey: "AIzaSyDzhPeSU6XNqvaSUA1ynq5wWAZ73CNad-Q",
+    authDomain: "smell-detection-4c7b0.firebaseapp.com",
+    databaseURL: "https://smell-detection-4c7b0-default-rtdb.firebaseio.com",
+    projectId: "smell-detection-4c7b0",
+    storageBucket: "smell-detection-4c7b0.firebasestorage.app",
+    messagingSenderId: "76903777129",
+    appId: "1:76903777129:web:3e4d585e9280ffb3ccb3f8",
+    measurementId: "G-S1YEY137RK"
 };
 
 // Initialize Firebase
@@ -17,7 +17,7 @@ let database;
 try {
     firebase.initializeApp(firebaseConfig);
     database = firebase.database();
-    console.log('Firebase initialized successfully');
+    console.log('✅ Firebase initialized successfully - NEW DATABASE: smell-detection-4c7b0');
 } catch (error) {
     console.error('Firebase initialization error:', error);
 }
@@ -90,9 +90,9 @@ let state = {
     missionStartTime: null,
     selectedMetric: 'temperature', // temperature, humidity, voltage
     data: {
-        temperature: 26.0,  // Firebase value
-        humidity: 66.0,     // Firebase value
-        voltage: 1.49       // Firebase value
+        temperature: 29.1,  // Firebase value from /data/
+        humidity: 0,        // Not in Firebase, using default
+        voltage: 0          // Firebase value from /data/
     },
     history: {
         labels: [],
@@ -177,13 +177,13 @@ function login() {
     
     // Load Firebase data FIRST, then show dashboard
     if (database) {
-        database.ref('test').once('value', (snapshot) => {
+        database.ref('data').once('value', (snapshot) => {
             const data = snapshot.val();
             if (data) {
-                console.log('✅ Loading Firebase values on login:', data);
-                state.data.temperature = Number(data.temperature) || 26;
-                state.data.humidity = Number(data.humidity) || 66;
-                state.data.voltage = Number(data.voltage) || 1.49;
+                console.log('✅ Loading Firebase values on login from /data:', data);
+                state.data.temperature = Number(data.temperature) || 29.1;
+                state.data.humidity = Number(data.humidity) || 0;
+                state.data.voltage = Number(data.voltage) || 0;
             }
             transitionToDashboard();
             startSimulation();
@@ -314,16 +314,17 @@ function loadRecentDataFromFirebase() {
     }
     
     try {
-        // IMMEDIATELY load and display Firebase /test node values
-        database.ref('test').once('value', (snapshot) => {
+        // IMMEDIATELY load and display Firebase /data node values (NEW DATABASE)
+        database.ref('data').once('value', (snapshot) => {
             const data = snapshot.val();
             if (data) {
-                console.log('✅ LOADING FIREBASE VALUES:', data);
+                console.log('✅ LOADING FIREBASE VALUES from /data:', data);
                 
                 // Set the actual display values from Firebase
                 if (data.temperature !== undefined) {
                     state.data.temperature = Number(data.temperature);
                 }
+                // Note: Your Firebase doesn't have humidity field, using default
                 if (data.humidity !== undefined) {
                     state.data.humidity = Number(data.humidity);
                 }
@@ -345,11 +346,11 @@ function loadRecentDataFromFirebase() {
             }
         });
         
-        // Set up real-time listener for /test node to display actual Firebase values
-        database.ref('test').on('value', (snapshot) => {
+        // Set up real-time listener for /data node to display actual Firebase values
+        database.ref('data').on('value', (snapshot) => {
             const data = snapshot.val();
             if (data) {
-                console.log('🔥 FIREBASE DATA UPDATE from /test:', data);
+                console.log('🔥 FIREBASE DATA UPDATE from /data:', data);
                 
                 // Update the actual display values with Firebase data
                 if (data.temperature !== undefined) {
@@ -522,20 +523,20 @@ function toggleSimulation() {
 function resetSimulation() {
     // Reset data to Firebase values (not simulated values)
     if (database) {
-        database.ref('test').once('value', (snapshot) => {
+        database.ref('data').once('value', (snapshot) => {
             const data = snapshot.val();
             if (data) {
                 state.data = {
-                    temperature: Number(data.temperature) || 26.0,
-                    humidity: Number(data.humidity) || 66.0,
-                    voltage: Number(data.voltage) || 1.49
+                    temperature: Number(data.temperature) || 29.1,
+                    humidity: Number(data.humidity) || 0,
+                    voltage: Number(data.voltage) || 0
                 };
             } else {
                 // Fallback to Firebase default values
                 state.data = {
-                    temperature: 26.0,
-                    humidity: 66.0,
-                    voltage: 1.49
+                    temperature: 29.1,
+                    humidity: 0,
+                    voltage: 0
                 };
             }
             state.history = {
@@ -554,9 +555,9 @@ function resetSimulation() {
     } else {
         // Fallback if Firebase not available
         state.data = {
-            temperature: 26.0,
-            humidity: 66.0,
-            voltage: 1.49
+            temperature: 29.1,
+            humidity: 0,
+            voltage: 0
         };
         state.history = {
             labels: [],
@@ -1193,33 +1194,33 @@ window.checkFirebaseData = function() {
             alert('❌ Error: ' + error.message);
         });
     
-    // Also check /test node
-    database.ref('test').once('value')
+    // Also check /data node (NEW DATABASE)
+    database.ref('data').once('value')
         .then((snapshot) => {
             const data = snapshot.val();
             if (data) {
-                console.log('📊 /test node:', data);
+                console.log('📊 /data node:', data);
             }
         })
         .catch((error) => {
-            console.error('❌ Error reading /test:', error);
+            console.error('❌ Error reading /data:', error);
         });
 };
 
-// Sync current display values from Firebase /test node
+// Sync current display values from Firebase /data node
 window.syncFromFirebase = function() {
-    console.log('🔄 Syncing from Firebase...');
+    console.log('🔄 Syncing from Firebase /data...');
     
     if (!database) {
         alert('❌ Firebase not initialized!');
         return;
     }
     
-    database.ref('test').once('value')
+    database.ref('data').once('value')
         .then((snapshot) => {
             const data = snapshot.val();
             if (data) {
-                console.log('✅ Synced data from Firebase:', data);
+                console.log('✅ Synced data from Firebase /data:', data);
                 
                 // Update state with Firebase values
                 if (data.temperature !== undefined) {
@@ -1235,9 +1236,9 @@ window.syncFromFirebase = function() {
                 // Update UI
                 updateUI();
                 
-                alert(`✅ Synced from Firebase!\n\nTemperature: ${data.temperature}°C\nHumidity: ${data.humidity}%\nVoltage: ${data.voltage}V`);
+                alert(`✅ Synced from Firebase!\n\nTemperature: ${data.temperature}°C\nHumidity: ${data.humidity || 0}%\nVoltage: ${data.voltage}V`);
             } else {
-                alert('⚠️ No data in /test node!');
+                alert('⚠️ No data in /data node!');
             }
         })
         .catch((error) => {
@@ -1246,9 +1247,9 @@ window.syncFromFirebase = function() {
         });
 };
 
-// Push current simulated values to Firebase /test node
+// Push current simulated values to Firebase /data node
 window.pushToFirebase = function() {
-    console.log('📤 Pushing current values to Firebase...');
+    console.log('📤 Pushing current values to Firebase /data...');
     
     if (!database) {
         alert('❌ Firebase not initialized!');
@@ -1259,16 +1260,15 @@ window.pushToFirebase = function() {
         temperature: state.data.temperature,
         humidity: state.data.humidity,
         voltage: state.data.voltage,
-        current: 0.01,
-        temperature_status: state.data.temperature > 60 ? "HIGH" : state.data.temperature < 0 ? "LOW" : "NORMAL",
-        voltage_status: state.data.voltage < 3.5 ? "LOW" : "NORMAL",
-        current_status: "NORMAL",
+        temperatureStatus: state.data.temperature > 60 ? "HIGH" : state.data.temperature < 0 ? "LOW" : "NORMAL",
+        voltageStatus: state.data.voltage < 3.5 ? "LOW" : "NORMAL",
+        humidityStatus: "NORMAL",
         timestamp: new Date().toISOString()
     };
     
-    database.ref('test').set(currentData)
+    database.ref('data').set(currentData)
         .then(() => {
-            console.log('✅ Pushed to Firebase:', currentData);
+            console.log('✅ Pushed to Firebase /data:', currentData);
             alert(`✅ Data pushed to Firebase!\n\nTemperature: ${currentData.temperature.toFixed(2)}°C\nHumidity: ${currentData.humidity.toFixed(2)}%\nVoltage: ${currentData.voltage.toFixed(2)}V`);
             updateFirebaseDebug('PUSHED', currentData);
         })
