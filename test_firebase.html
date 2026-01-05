@@ -1,0 +1,155 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Firebase Test - Smell Detection</title>
+    <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-app-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-database-compat.js"></script>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            max-width: 800px;
+            margin: 50px auto;
+            padding: 20px;
+            background: #1a1a2e;
+            color: white;
+        }
+        button {
+            padding: 10px 20px;
+            margin: 10px;
+            font-size: 16px;
+            cursor: pointer;
+            background: #00d4ff;
+            border: none;
+            border-radius: 5px;
+            color: black;
+            font-weight: bold;
+        }
+        button:hover {
+            background: #00a8cc;
+        }
+        #output {
+            background: #0f0f1e;
+            padding: 20px;
+            border-radius: 10px;
+            margin-top: 20px;
+            min-height: 200px;
+            font-family: 'Courier New', monospace;
+        }
+        .success { color: #00ff88; }
+        .error { color: #ff4d4d; }
+        .info { color: #ffaa00; }
+    </style>
+</head>
+<body>
+    <h1>🔥 Firebase Connection Test</h1>
+    <p>Database: <strong>smell-detection-4c7b0</strong></p>
+    
+    <button onclick="testRead()">📖 Read /data/</button>
+    <button onclick="testWrite()">✍️ Write Test Data</button>
+    <button onclick="writeSampleData()">📊 Write Sample Sensor Data</button>
+    <button onclick="clearOutput()">🗑️ Clear Output</button>
+    
+    <div id="output"></div>
+
+    <script>
+        const firebaseConfig = {
+            apiKey: "AIzaSyDzhPeSU6XNqvaSUA1ynq5wWAZ73CNad-Q",
+            authDomain: "smell-detection-4c7b0.firebaseapp.com",
+            databaseURL: "https://smell-detection-4c7b0-default-rtdb.firebaseio.com",
+            projectId: "smell-detection-4c7b0",
+            storageBucket: "smell-detection-4c7b0.firebasestorage.app",
+            messagingSenderId: "76903777129",
+            appId: "1:76903777129:web:3e4d585e9280ffb3ccb3f8",
+            measurementId: "G-S1YEY137RK"
+        };
+
+        let database;
+        const output = document.getElementById('output');
+
+        function log(message, type = 'info') {
+            const timestamp = new Date().toLocaleTimeString();
+            output.innerHTML += `<div class="${type}">[${timestamp}] ${message}</div>`;
+            output.scrollTop = output.scrollHeight;
+        }
+
+        function clearOutput() {
+            output.innerHTML = '';
+        }
+
+        // Initialize Firebase
+        try {
+            firebase.initializeApp(firebaseConfig);
+            database = firebase.database();
+            log('✅ Firebase initialized successfully!', 'success');
+        } catch (error) {
+            log('❌ Firebase initialization error: ' + error.message, 'error');
+        }
+
+        // Test reading data
+        function testRead() {
+            log('📖 Reading /data/ node...', 'info');
+            database.ref('data').once('value')
+                .then((snapshot) => {
+                    const data = snapshot.val();
+                    if (data) {
+                        log('✅ Data read successfully:', 'success');
+                        log(JSON.stringify(data, null, 2), 'success');
+                    } else {
+                        log('⚠️ No data found in /data/', 'info');
+                    }
+                })
+                .catch((error) => {
+                    log('❌ Error reading data: ' + error.message, 'error');
+                });
+        }
+
+        // Test writing data
+        function testWrite() {
+            const testData = {
+                test: true,
+                timestamp: new Date().toISOString(),
+                message: 'Test write successful'
+            };
+            
+            log('✍️ Writing to /test/ node...', 'info');
+            database.ref('test').set(testData)
+                .then(() => {
+                    log('✅ Test data written successfully!', 'success');
+                    log(JSON.stringify(testData, null, 2), 'success');
+                })
+                .catch((error) => {
+                    log('❌ Error writing data: ' + error.message, 'error');
+                });
+        }
+
+        // Write sample sensor data
+        function writeSampleData() {
+            const sensorData = {
+                temperature: 29.1,
+                voltage: 3.3,
+                humidity: 45,
+                temperatureStatus: "NORMAL",
+                voltageStatus: "NORMAL",
+                humidityStatus: "NORMAL",
+                timestamp: new Date().toISOString()
+            };
+            
+            log('📊 Writing sample sensor data to /data/...', 'info');
+            database.ref('data').set(sensorData)
+                .then(() => {
+                    log('✅ Sensor data written successfully!', 'success');
+                    log(JSON.stringify(sensorData, null, 2), 'success');
+                    log('🔄 Now refresh your main website to see these values!', 'info');
+                })
+                .catch((error) => {
+                    log('❌ Error writing sensor data: ' + error.message, 'error');
+                });
+        }
+
+        // Auto-test on load
+        window.addEventListener('load', () => {
+            setTimeout(testRead, 1000);
+        });
+    </script>
+</body>
+</html>
